@@ -5,7 +5,6 @@ class Node:
         self.parent = parent
         self.next = None
         self.prev = None
-        self.children = LinkedList()
 
 
 class LinkedList:
@@ -56,7 +55,7 @@ class LFU:
             # if there already is a frequency node then insert the new
             # node into it
             n = Node(key, value, self.frequency_list.head)
-            self.frequency_list.head.children.insert_head(n)
+            self.frequency_list.head.value.insert_head(n)
             self.lookup[key] = n
 
     def get(self, key):
@@ -73,25 +72,25 @@ class LFU:
         next_node = current_parent.next
         # remove the node that I'm about to increment from the it's current parent
         # because it's about to be moved
-        current_parent.children.remove(node)
-        if next_node == None or next_node.value != current_parent.value+1:
+        current_parent.value.remove(node)
+        if next_node == None or next_node.key != current_parent.key + 1:
             # If there is not a frequency node with a frequency value of the current + 1 then create a new
             # frequency node
             self._create_frequency_node(
-                node.key, node.value, current_parent.value+1, current_parent)
+                node.key, node.value, current_parent.key + 1, current_parent)
         else:
             # if there is a frequency node with the correct frequency value then
             # I just need to create a new node with that frequency node as the parent
             # and update ther lookup dict
             n = Node(node.key, node.value, next_node)
             self.lookup[node.key] = n
-            next_node.children.insert_head(n)
+            next_node.value.insert_head(n)
 
     def _create_frequency_node(self, key, node_value, frequency, old_parent=None):
-        frequency_node = Node('frequency-node', frequency)
+        frequency_node = Node(frequency, LinkedList())
         # create a list node with the frequency node as it's parent
         list_node = Node(key, node_value, frequency_node)
-        frequency_node.children.insert_head(list_node)
+        frequency_node.value.insert_head(list_node)
 
         self.lookup[key] = list_node
         if old_parent == None:
@@ -104,8 +103,8 @@ class LFU:
         # first get the left most frequency node (it'll be the least used nodes) and
         # then remove any child from that node
         least_used_node = self.frequency_list.head
-        head = least_used_node.children.head
-        least_used_node.children.remove(head)
+        head = least_used_node.value.head
+        least_used_node.value.remove(head)
         self.lookup[head.key] = None
         print('remove', head.key)
 
