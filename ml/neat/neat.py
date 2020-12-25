@@ -13,12 +13,21 @@
 #             print("Episode finished after {} timesteps".format(t+1))
 #             break
 # env.close()
+import random
+import math
+
 
 class NEAT:
     def __init__(self):
         self.innovation_counter = 0
         self.node_counter = 0
         self.current_gen_mutations = []
+        self.config = {
+            'c1': 1.0,
+            'c2': 1.0,
+            'c3': .4,
+            'distance_threshold': 3
+        }
 
     def distance(self, a_genome, b_genome):
         a_connections = a_genome.network.connections
@@ -26,11 +35,51 @@ class NEAT:
         excess_count, disjoint_count, weight_difference = self._calculate_excess_and_disjoint_nodes(
             a_connections, b_connections)
 
-        print("excess {}, disjoint {}".format(excess_count, disjoint_count))
+        print('distance excess {}, disjoint {}, weight difference {}'.format(
+            excess_count, disjoint_count, weight_difference))
+
+        n_factor = max(len(a_connections), len(b_connections))
+        if len(a_connections) < 20 and len(b_connections):
+            n_factor = 1
+
+        distance = self.config['c1'] * excess_count / n_factor + self.config['c2'] * \
+            disjoint_count / n_factor + self.config['c3'] * weight_difference
+
+        return distance
+
+    def explicit_sharing_function(self, species, genome):
+        total_sh = 0
+        for g in species.genomes:
+            distance = self.distance(genome, g)
+            sh = self.sh(distance)
+            total_sh += sh
+
+        return genome.fitness / total_sh
+
+    def sh(self, distance):
+        return 0 if distance > self.config['distance_threshold'] else 1
+
+    def mutate(self, genome):
+        weight_rand = random.random()
+        # 80 percent change of a connection having it's weights mutated
+        if weight_rand < .8:
+            genome.weight_mutation()
+
+        connection_rand = random.random()
+        # probability of a new link mutation was 0.05
+        if connection_rand < .05:
+            genome.connection_mutation()
+
+        node_rand = random.random()
+        # the probability of adding a new node was 0.03
+        if node_rand < .03:
+            genome.node_mutation()
 
     def _calculate_excess_and_disjoint_nodes(self, a_connections, b_connections):
-        a_highest = max(map(lambda x: x.innovation, a_connections))
-        b_highest = max(map(lambda x: x.innovation, b_connections))
+        a_highest = max(map(lambda x: x.innovation, a_connections)) if len(
+            a_connections) > 0 else 0
+        b_highest = max(map(lambda x: x.innovation, b_connections)) if len(
+            b_connections) > 0 else 0
         highest = max(a_highest, b_highest)
         lower = min(a_highest, b_highest)
 
@@ -133,6 +182,38 @@ class Species:
 class Genome:
     def __init__(self, neat):
         self.network = Network(neat)
+        self.fitness = 0
+        self.neat = neat
+
+    def weight_mutation(self):
+        rand = random.random()
+        con = self.network.connections[math.floor(
+            len(self.network.connections) * random.random())]
+
+        if rand < .90:
+            # 90% chance of being uniformly perturbed
+            max_mutation = abs(con.weight)
+            new_weight = max_mutation + \
+                (random.random() * max_mutation * 2 - max_mutation)
+            con.weight = new_weight
+
+        else:
+            # 10% chance of being assigned a new random value
+            new_weight = random.random() * 4 - 2  # random weight between 2 and -2
+            con.weight = new_weight
+
+    def connection_mutation(self):
+        pairs = self.network.find_unconnected_nodes()
+        rand = random.random()
+        random_pair = pairs[math.floor(len(pairs) * rand)]
+        self.network.insert_connection(random_pair[0], random_pair[1])
+
+    def node_mutation(self):
+        rand = random.random()
+        con = self.network.connections[math.floor(
+            len(self.network.connections) * rand)]
+
+        self.network.insert_node(Node(self.neat.node_counter), con)
 
 
 class Connection:
@@ -145,12 +226,30 @@ class Connection:
 
 
 class Node:
-    def __init__(self, id, value):
+    def __init__(self, id, value=0):
         self.id = id
         self.value = value
 
 
 neat = NEAT()
+
+a_genome = Genome(neat)
+a_genome.network.nodes.append(Node(0, 1))
+a_genome.network.nodes.append(Node(1, 1))
+a_genome.network.nodes.append(Node(2, 1))
+a_genome.network.connections.append(
+    Connection(0, Node(0, 0), Node(1, 0), 1, True))
+a_genome.network.connections.append(
+    Connection(1, Node(0, 0), Node(2, 0), 1, True))
+
+b_genome = Genome(neat)
+b_genome.network.nodes.append(Node(0, 1))
+b_genome.network.connections.append(
+    Connection(3, Node(0, 1), Node(1, 1), .5, True))
+
+distance = neat.distance(a_genome, b_genome)
+print('distance {}'.format(distance))
+
 e, d, average_weight_difference = neat._calculate_excess_and_disjoint_nodes(
     [
         Connection(0, Node(0, 10), Node(1, 10), 1, True),
