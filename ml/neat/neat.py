@@ -29,14 +29,50 @@ class NEAT:
             'distance_threshold': 3
         }
 
+    def crossover(self, a_genome, b_genome):
+        more_fit = -1
+        same_fitness = a_genome.fitness == b_genome.fitness
+        if not same_fitness:
+            if a_genome.fitness > b_genome.fitness:
+                more_fit = 0
+            else:
+                more_fit = 1
+
+        a_highest = max(map(lambda x: x.innovation, a_genome.network.connections)) if len(
+            a_genome.network.connections) > 0 else 0
+        b_highest = max(map(lambda x: x.innovation, b_genome.network.connections)) if len(
+            b_genome.network.connections) > 0 else 0
+        highest = max(a_highest, b_highest)
+
+        offspring = Genome(self)
+
+        for i in range(highest + 1):
+            a_connection = [
+                c for c in a_genome.network.connections if c.innovation == i]
+            b_connection = [
+                c for c in b_genome.network.connections if c.innovation == i]
+
+            if len(a_connection) > 0 and len(b_connection) > 0:
+                if same_fitness:
+                    # pick randomly
+                    rand = random.random()
+                    if rand < .5:
+                        offspring.network.append_connection(
+                            a_connection.clone(), True)
+                    else:
+                        offspring.network.append_connection(
+                            b_connection.clone(), True)
+
+                else:
+                    # pick from the more fit parent
+                    more_fit_con = a_connection[0] if more_fit == 0 else b_connection[0]
+                    offspring.network.append_connection(more_fit_con.clone())
+
     def distance(self, a_genome, b_genome):
         a_connections = a_genome.network.connections
         b_connections = b_genome.network.connections
         excess_count, disjoint_count, weight_difference = self._calculate_excess_and_disjoint_nodes(
             a_connections, b_connections)
-
-        print('distance excess {}, disjoint {}, weight difference {}'.format(
-            excess_count, disjoint_count, weight_difference))
 
         n_factor = max(len(a_connections), len(b_connections))
         if len(a_connections) < 20 and len(b_connections):
@@ -149,6 +185,22 @@ class Network:
         self.connections.append(connection)
         self.neat.current_gen_mutations.append(connection)
 
+    def append_connection(self, connection, create_nodes=False):
+        self.connections.append(connection)
+        if create_nodes:
+            # if create_nodes is set to true this'll create the nodes
+            # from the connection if they don't already exist
+            in_node = connection.in_node.clone()
+            out_node = connection.out_node.clone()
+
+            has_in_node = [n for n in self.nodes if n.id == in_node.id]
+            if not len(has_in_node) > 0:
+                self.nodes.append(in_node)
+
+            has_out_node = [n for n in self.nodes if n.id == out_node.id]
+            if not len(has_out_node) > 0:
+                self.nodes.append(out_node)
+
     def find_unconnected_nodes(self):
         pairs = []
         for n in self.nodes:
@@ -227,11 +279,17 @@ class Connection:
         self.weight = weight
         self.enabled = enabled
 
+    def clone(self):
+        return Connection(self.innovation, self.in_node.clone(), self.out_node.clone(), self.weight, self.enabled)
+
 
 class Node:
     def __init__(self, id, value=0):
         self.id = id
         self.value = value
+
+    def clone(self):
+        return Node(self.id, self.value)
 
 
 neat = NEAT()
