@@ -17,7 +17,7 @@ class City:
 * `parent_pick_type` was `random`
 * `population_size` was 250
 * `mutation_rate` was 0.1
-It ran for 200 generations.
+It ran for 400 generations.
 
 ## Test 1
 ![](./imgs/ga_test_1.png)
@@ -26,19 +26,10 @@ It ran for 200 generations.
 * `parent_pick_type` was `random`
 * `population_size` was 250
 * `mutation_rate` was 0.1
-It ran for 200 generations.
+It ran for 400 generations.
 
 ## Test 2
-![]('./imgs/ga_test_2.png')
-
-* `elitism_count` was 30
-* `parent_pick_type` was `tournament` (tournament size was 8)
-* `population_size` was 250
-* `mutation_rate` was 0.1
-It ran for 200 generations.
-
-## Test 3
-![]('./imgs/ga_test_3.png')
+![](imgs/ga_test_2.png)
 
 * `elitism_count` was 30
 * `parent_pick_type` was `tournament` (tournament size was 8)
