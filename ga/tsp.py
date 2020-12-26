@@ -3,8 +3,9 @@ import math
 import matplotlib.pyplot as plt
 
 mutation_rate = 0.1
-elitism_count = 1
+elitism_count = 30
 parent_pick_type = 'tournament'
+tournament_size = 16
 sim_population_size = 250
 
 
@@ -108,30 +109,26 @@ class GA:
 
     def _tournament_selection(self):
         tournament = []
-        tournament_size = 8
         for _ in range(tournament_size):
             rand_genome = self.genomes[math.floor(
                 random.random() * len(self.genomes))]
             tournament.append(rand_genome)
 
-        second_round = []
+        return self._tournament(tournament)
+
+    def _tournament(self, players):
+        if len(players) == 2:
+            return self._tournament_diff(players[0], players[1])
+
+        next_round = []
         x = 0
-        for i in range(math.floor(tournament_size/2)):
-            a, b = tournament[x], tournament[x+1]
+        for _ in range(math.floor(len(players)/2)):
+            a, b = players[x], players[x+1]
             better = self._tournament_diff(a, b)
-            second_round.append(better)
+            next_round.append(better)
             x += 2
 
-        final_round = []
-        x = 0
-        for i in range(math.floor(tournament_size / 2 / 2)):
-            a, b = second_round[x], second_round[x+1]
-            better = self._tournament_diff(a, b)
-            final_round.append(better)
-            x += 2
-
-        best = self._tournament_diff(final_round[0], final_round[1])
-        return best
+        return self._tournament(next_round)
 
     def _tournament_diff(self, a_genome, b_genome):
         # return the better genome
