@@ -215,6 +215,9 @@ class Genome:
 
         self.network.insert_node(Node(self.neat.node_counter), con)
 
+    def modified_sigmoid(self, x):
+        return 1 / 1 + math.pow(math.e, -4.9 * x)
+
 
 class Connection:
     def __init__(self, innovation, in_node, out_node, weight, enabled):
