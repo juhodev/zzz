@@ -7,6 +7,7 @@ elitism_count = 30
 parent_pick_type = 'tournament'
 tournament_size = 16
 sim_population_size = 250
+crossover_type = 'uniform'
 
 
 class City:
@@ -146,7 +147,36 @@ class GA:
         return total / len(self.genomes)
 
     def _crossover(self, a_parent, b_parent):
-        # I think for now I want to do single point crossover but the more fit parent should always contribute more
+        if crossover_type == 'single':
+            return self._single_point_crossover(a_parent, b_parent)
+        elif crossover_type == 'uniform':
+            return self._uniform_crossover(a_parent, b_parent)
+
+    def _uniform_crossover(self, a_parent, b_parent):
+        # pick random gene from each parent
+        new_cities = []
+        for _ in range(len(a_parent.route.cities)):
+            rand = random.random()
+            if rand < .5:
+                for city in a_parent.route.cities:
+                    already_in = [
+                        c for c in new_cities if city.x == c.x and city.y == c.y]
+                    if len(already_in) == 0:
+                        new_cities.append(city)
+                        break
+            else:
+                for city in b_parent.route.cities:
+                    already_in = [
+                        c for c in new_cities if city.x == c.x and city.y == c.y]
+                    if len(already_in) == 0:
+                        new_cities.append(city)
+                        break
+
+        route = Route()
+        route.cities = new_cities
+        return Genome(route)
+
+    def _single_point_crossover(self, a_parent, b_parent):
         a_fit = a_parent.get_fitness()
         b_fit = b_parent.get_fitness()
 

@@ -11,13 +11,14 @@ class City:
         self.y = y
 ```
 
-| test   | parent pick type | population size | mutation rate | tourname size | elitism count |
-| ------ | ---------------- | --------------- | ------------- | ------------- | ------------- |
-| test 0 | random           | 250             | 0.1           | -             | 1             |
-| test 1 | random           | 250             | 0.1           | -             | 30            |
-| test 2 | tournament       | 250             | 0.1           | 8             | 1             |
-| test 3 | tournament       | 250             | 0.1           | 168           | 1             |
-| test 4 | tournament       | 250             | 0.1           | 16            | 30            |
+| test   | parent pick type | population size | mutation rate | tourname size | elitism count | crossover type |
+| ------ | ---------------- | --------------- | ------------- | ------------- | ------------- | -------------- |
+| test 0 | random           | 250             | 0.1           | -             | 1             | single         |
+| test 1 | random           | 250             | 0.1           | -             | 30            | single         |
+| test 2 | tournament       | 250             | 0.1           | 8             | 1             | single         |
+| test 3 | tournament       | 250             | 0.1           | 168           | 1             | single         |
+| test 4 | tournament       | 250             | 0.1           | 16            | 30            | single         |
+| test 5 | tournament       | 250             | 0.1           | 16            | 30            | uniform        |
 
 ## Test 0
 
@@ -27,6 +28,7 @@ class City:
 - `parent_pick_type` was `random`
 - `population_size` was 250
 - `mutation_rate` was 0.1
+- `crossover type` was `uniform`
   It ran for 400 generations.
 
 ## Test 1
@@ -37,6 +39,7 @@ class City:
 - `parent_pick_type` was `random`
 - `population_size` was 250
 - `mutation_rate` was 0.1
+- `crossover type` was `uniform`
   It ran for 400 generations.
 
 ## Test 2
@@ -47,6 +50,7 @@ class City:
 - `parent_pick_type` was `tournament` (tournament size was 8)
 - `population_size` was 250
 - `mutation_rate` was 0.1
+- `crossover type` was `uniform`
   It ran for 400 generations.
 
 ## Test 3
@@ -57,14 +61,16 @@ class City:
 - `parent_pick_type` was `tournament` (tournament size was 168)
 - `population_size` was 250
 - `mutation_rate` was 0.1
+- `crossover type` was `uniform`
   It ran for 400 generations.
 
 ## Test 4
 
-![](imgs/ga_test_4.png)
+![](imgs/ga_test_5.png)
 
 - `elitism_count` was 30
 - `parent_pick_type` was `tournament` (tournament size was 16)
 - `population_size` was 250
 - `mutation_rate` was 0.1
+- `crossover type` was `uniform`
   It ran for 400 generations.
