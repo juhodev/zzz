@@ -4,7 +4,7 @@ import math
 
 
 class Genome:
-    def __init__(self, neat):
+    def __init__(self, neat, created_gen):
         self.neat = neat
         self.network = Network(neat)
         self.fitness = 0
@@ -12,6 +12,7 @@ class Genome:
         self.original_fitness = 0
         self.num_of_expected_offspring = 0
         self.marked_for_death = False
+        self.created_gen = created_gen
 
     def weight_mutation(self):
         con = self.network.connections[math.floor(

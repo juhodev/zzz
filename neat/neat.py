@@ -15,6 +15,8 @@
 # env.close()
 import random
 import math
+from population import Population
+from genome import Genome
 
 
 class NEAT:
@@ -30,7 +32,7 @@ class NEAT:
         }
         self.population = Population(self)
 
-    def combine_mutation(self):
+    # def combine_mutation(self):
 
     def crossover(self, a_genome, b_genome):
         more_fit = -1
@@ -80,8 +82,8 @@ class NEAT:
 
     #     return genome.fitness / total_sh
 
-    def sh(self, distance):
-        return 0 if distance > self.config['distance_threshold'] else 1
+    # def sh(self, distance):
+    #     return 0 if distance > self.config['distance_threshold'] else 1
 
     def mutate(self, genome):
         weight_rand = random.random()
@@ -100,105 +102,10 @@ class NEAT:
             genome.node_mutation()
 
 
-class Population:
-    def __init__(self, neat):
-        self.neat = neat
-        self.genomes = []
-        self.species = []
-        self.gen = 0
+# This is just a base genome that has four connections to the output node
+parent_a = Genome()
 
-    def speciate(self):
-        for g in self.genomes:
-            if len(self.species) == 0:
-                new_species = Species(self.neat)
-                new_species.genomes.append(g)
-                self.species.append(new_species)
-                continue
-
-            for s in self.species:
-                rep = s.get_representitive()
-                if g.distance(rep) < self.neat.config['distance_threshold']:
-                    g.species = s
-                    break
-
-            new_species = Species(self.neat)
-            new_species.genomes.append(g)
-            self.species.append(new_species)
-
-    def add_genome(self, g):
-        if len(self.species) == 0:
-            new_species = Species(self.neat)
-            g.species = new_species
-            new_species.genomes.append(g)
-            self.species.append(new_species)
-            return
-
-        for s in self.species:
-            rep = s.get_representitive()
-            if g.distance(rep) < self.neat.config['distance_threshold']:
-                g.species = s
-                s.genomes.append(g)
-                return
-
-        new_species = Species(self.neat)
-        g.species = new_species
-        new_species.genomes.append(g)
-        self.species.append(new_species)
-
-    def update(self):
-        self.species.sort(key=self._sort_species_key, reverse=True)
-
-        for s in self.species:
-            s.adjust_fitness()
-
-        total_fitness = 0
-        for g in self.genomes:
-            total_fitness += g.fitness
-
-        avg_fitness = total_fitness / len(self.genomes)
-
-        for g in self.genomes:
-            g.number_of_expected_offspring = g.fitness / avg_fitness
-
-        skim = 0
-        total_expected = 0
-
-        for s in self.species:
-            skim = s.count_offspring(skim)
-            total_expected = s.expected_offspring
-
-        # might need to make up for lost precision in here by adding one offspring to the best species
-
-        # kill all the genomes marked for death
-        # rip
-        for i in range(len(self.genomes)):
-            g = self.genomes[i]
-            if g.mark_for_death:
-                g.species.remove_genome(g)
-                self.genomes.pop(i)
-                i -= 1
-
-        for s in self.species:
-            s.reproduce()
-
-        for i in range(len(self.genomes)):
-            g = self.genomes[g]
-            if g.created_gen == self.gen:
-                g.species.remove_genome(g)
-                self.genomes.pop(i)
-                i -= 1
-
-        for i in range(len(self.species)):
-            s = self.species[i]
-            if len(s.genomes) == 0:
-                self.species.pop(i)
-                i -= 1
-
-        # TODO: remove all the connection changes
-
-    def _sort_species_key(self, elem):
-        return elem.max_fitness_reached
-
+print('Hello world')
 # neat = NEAT()
 
 # a_genome = Genome(neat)
