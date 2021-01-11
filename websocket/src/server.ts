@@ -30,7 +30,9 @@ class Server {
 						this.send(socket, 'test');
 					}, 1000);
 				} else {
-					console.log('received from client', JSON.stringify(data));
+					// console.log('received from client', JSON.stringify(data));
+					const frame: Frame = new Frame(data);
+					console.log('FRAME:', JSON.stringify(frame.read()));
 					if (this.x !== 0) {
 						return;
 					}
@@ -48,7 +50,7 @@ class Server {
 	send(socket: net.Socket, str: string) {
 		const frame: Frame = new Frame();
 		frame.create(Opcode.TEXT_FRAME, str);
-		console.log('Sending frame', JSON.stringify(frame.toBuffer()));
+		console.log('Sending frame', JSON.stringify(frame.read()));
 		socket.write(frame.toBuffer());
 	}
 

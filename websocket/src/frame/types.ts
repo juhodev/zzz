@@ -8,3 +8,15 @@ export enum Opcode {
 	PONG = 0xa,
 	// 0xB - 0xF are reserved for further control frames
 }
+
+export type FrameData = {
+	FIN: number;
+	RSV1: number;
+	RSV2: number;
+	RSV3: number;
+	opcode: number;
+	mask: number;
+	payloadLength: number;
+	maskingKey: number;
+	applicationData: string;
+};
