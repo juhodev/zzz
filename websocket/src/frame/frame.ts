@@ -12,12 +12,17 @@ class Frame {
 		}
 	}
 
-	create(opcode: Opcode, payload: string) {
+	create(opcode: Opcode, payload: string, finBit: boolean) {
 		// FIN
 		// RSV1
 		// RSV2
 		// RSV3
-		let firstEight: number = 0b10000000;
+		let firstEight: number;
+		if (finBit) {
+			firstEight = 0b10000000;
+		} else {
+			firstEight = 0b00000000;
+		}
 		firstEight |= opcode;
 		this.byteBuffer.writeUint8(firstEight);
 
