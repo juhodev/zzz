@@ -1,5 +1,12 @@
-console.log('Hello world');
-import Server from './server';
+import WSClient from './client/WSClient';
+import WSServer from './server/WSServer';
 
-const server: Server = new Server();
-server.start(3000);
+const wsServer: WSServer = new WSServer();
+
+wsServer.listen(3000);
+wsServer.onConnection = (client: WSClient) => {
+	client.on('message', (message) => {
+		console.log('message from client:', message);
+		client.write('this is a test message that is written to the client');
+	});
+};
