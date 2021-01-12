@@ -1,6 +1,6 @@
 import * as net from 'net';
 import Frame from '../frame/frame';
-import { Opcode } from '../frame/types';
+import { FrameData, Opcode } from '../frame/types';
 import { createServerOpeningHandshake, parseHTTPHeaders } from '../utils';
 import { listeners } from './types';
 
@@ -24,10 +24,7 @@ class WSClient {
 			}
 
 			const frame: Frame = new Frame(data);
-			if (this.onMessage !== undefined) {
-				const message: string = frame.read().applicationData;
-				this.onMessage(message);
-			}
+			this.handleFrame(frame);
 		});
 	}
 
@@ -56,6 +53,41 @@ class WSClient {
 			case 'message':
 				this.onMessage = callback;
 				break;
+		}
+	}
+
+	ping() {
+		const frame: Frame = new Frame();
+		frame.create(Opcode.PING, 'ping', true);
+		this.socket.write(frame.toBuffer());
+	}
+
+	private pong() {
+		const frame: Frame = new Frame();
+		frame.create(Opcode.PONG, '', true);
+		this.socket.write(frame.toBuffer());
+	}
+
+	private handleFrame(frame: Frame) {
+		const frameData: FrameData = frame.read();
+		switch (frameData.opcode) {
+			case Opcode.TEXT_FRAME:
+				if (this.onMessage !== undefined) {
+					this.onMessage(frameData.applicationData);
+				}
+				break;
+
+			case Opcode.PONG:
+				console.log('received pong');
+				break;
+
+			case Opcode.PING:
+				this.pong();
+				return;
+
+			default:
+				console.error(`Received a frame I couldnt handle!! (Opcode: ${frameData.opcode.toString(16)})`);
+				return;
 		}
 	}
 
