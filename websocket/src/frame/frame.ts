@@ -1,6 +1,4 @@
 import * as ByteBuffer from 'bytebuffer';
-import { exception } from 'console';
-import { decode, encode } from 'punycode';
 import { FrameData, Opcode } from './types';
 
 class Frame {
@@ -16,48 +14,28 @@ class Frame {
 
 	create(opcode: Opcode, payload: string) {
 		// FIN
-		this.byteBuffer.writeByte(1);
-
 		// RSV1
-		this.byteBuffer.writeByte(0);
-
 		// RSV2
-		this.byteBuffer.writeByte(0);
-
 		// RSV3
-		this.byteBuffer.writeByte(0);
+		let firstEight: number = 0b10000000;
+		firstEight |= opcode;
 
-		// Opcode
-		const testOpcode: Buffer = Buffer.alloc(4);
-		testOpcode.writeUInt32LE(0x1);
-
-		this.byteBuffer.append(testOpcode);
-
-		// Mask
-		this.byteBuffer.writeByte(0);
-
-		// Payload length
+		let payloadLength: Buffer;
 		if (payload.length > 0 && payload.length <= 125) {
-			// if the payload length it less than 125 then I can just write
-			// it here and I'm done
-			this.byteBuffer.writeUint8(payload.length);
+			payloadLength = Buffer.alloc(1);
+			payloadLength.writeUInt8(payload.length);
 		} else if (payload.length > 125 && payload.length <= 65535) {
-			this.byteBuffer.writeUint8(126);
-			// The above number is bitshifted by one so write over the last
-			// zero bit
-			this.byteBuffer.writeUint16(payload.length, this.byteBuffer.offset - 1);
+			payloadLength = Buffer.alloc(3);
+			payloadLength.writeUInt8(126);
+			payloadLength.writeUInt16LE(payload.length);
 		} else {
-			this.byteBuffer.writeUint8(127);
-			this.byteBuffer.writeUint64(payload.length, this.byteBuffer.offset - 1);
+			payloadLength = Buffer.alloc(5);
+			payloadLength.writeUInt8(127);
+			payloadLength.writeUInt32LE(payload.length);
 		}
 
-		// Masking-key
-		// There is no masking-key when sending from server to client
-
-		// Payload data
-		// For now, there will not be any extension data
-
-		// Application data
+		this.byteBuffer.writeUint8(firstEight);
+		this.byteBuffer.append(payloadLength);
 		this.byteBuffer.writeString(payload);
 	}
 
@@ -110,11 +88,16 @@ class Frame {
 		buffer.copy(applicationData, 0, POSITION, (POSITION += payloadLength));
 
 		let decoded: string = '';
-		for (let i = 0; i < applicationData.length; i++) {
-			const encoded: number = applicationData.readInt8(i);
-			const maskBit: number = maskBuffer.readInt8(i % 4);
-			decoded += String.fromCharCode(encoded ^ maskBit);
+		if (mask === 1) {
+			for (let i = 0; i < applicationData.length; i++) {
+				const encoded: number = applicationData.readInt8(i);
+				const maskBit: number = maskBuffer.readInt8(i % 4);
+				decoded += String.fromCharCode(encoded ^ maskBit);
+			}
+		} else {
+			decoded = applicationData.toString();
 		}
+
 		return {
 			FIN: fin,
 			RSV1: rsv1,

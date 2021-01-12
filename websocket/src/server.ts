@@ -27,7 +27,7 @@ class Server {
 					this.upgraded = true;
 
 					setTimeout(() => {
-						this.send(socket, 'test');
+						this.send(socket, 'I CAN SEND MESSAGES');
 					}, 1000);
 				} else {
 					// console.log('received from client', JSON.stringify(data));
