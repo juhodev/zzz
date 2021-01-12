@@ -1,1 +1,1 @@
-export type listeners = 'message';
+export type ClientListeners = 'message' | 'close';

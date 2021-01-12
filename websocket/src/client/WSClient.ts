@@ -2,13 +2,14 @@ import * as net from 'net';
 import Frame from '../frame/frame';
 import { FrameData, Opcode } from '../frame/types';
 import { createServerOpeningHandshake, parseHTTPHeaders } from '../utils';
-import { listeners } from './types';
+import { ClientListeners } from './types';
 
 class WSClient {
 	upgraded: boolean;
 
 	private socket: net.Socket;
 	private onMessage: (message: string) => void;
+	private onClose: (message: string) => void;
 
 	constructor() {
 		this.upgraded = false;
@@ -48,10 +49,14 @@ class WSClient {
 		this.socket.write(frame.toBuffer());
 	}
 
-	on(listener: listeners, callback: (message: string) => void) {
+	on(listener: ClientListeners, callback: (message: string) => void) {
 		switch (listener) {
 			case 'message':
 				this.onMessage = callback;
+				break;
+
+			case 'close':
+				this.onClose = callback;
 				break;
 		}
 	}
@@ -83,7 +88,13 @@ class WSClient {
 
 			case Opcode.PING:
 				this.pong();
-				return;
+				break;
+
+			case Opcode.CONNECTION_CLOSE:
+				if (this.onClose !== undefined) {
+					this.onClose(frameData.applicationData);
+				}
+				break;
 
 			default:
 				console.error(`Received a frame I couldnt handle!! (Opcode: ${frameData.opcode.toString(16)})`);

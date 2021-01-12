@@ -10,6 +10,10 @@ wsServer.onConnection = (client: WSClient) => {
 		client.write('this is a test message that is written to the client', 12);
 		client.ping();
 	});
+
+	client.on('close', (message) => {
+		console.log(`Connection closed to the client (${message})`);
+	});
 };
 
 console.log('listening on port 3000');
