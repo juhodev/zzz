@@ -11,8 +11,11 @@ class WSClient {
 	private onMessage: (message: string) => void;
 	private onClose: (message: string) => void;
 
+	private currentFrames: FrameData[];
+
 	constructor() {
 		this.upgraded = false;
+		this.currentFrames = [];
 	}
 
 	attach(socket: net.Socket) {
@@ -77,9 +80,7 @@ class WSClient {
 		const frameData: FrameData = frame.read();
 		switch (frameData.opcode) {
 			case Opcode.TEXT_FRAME:
-				if (this.onMessage !== undefined) {
-					this.onMessage(frameData.applicationData);
-				}
+				this.handleMessage(frameData);
 				break;
 
 			case Opcode.PONG:
@@ -107,6 +108,32 @@ class WSClient {
 		const serverHandshake: string = createServerOpeningHandshake(headers);
 		this.socket.write(serverHandshake);
 		this.upgraded = true;
+	}
+
+	private handleMessage(frame: FrameData) {
+		if (frame.FIN === 1) {
+			if (this.currentFrames.length === 0) {
+				if (this.onMessage !== undefined) {
+					this.onMessage(frame.applicationData);
+				}
+				return;
+			}
+
+			let concatinatedMessage: string = '';
+			for (const frame of this.currentFrames) {
+				concatinatedMessage += frame.applicationData;
+			}
+			concatinatedMessage += frame.applicationData;
+
+			if (this.onMessage !== undefined) {
+				this.onMessage(concatinatedMessage);
+			}
+
+			this.currentFrames = [];
+			return;
+		}
+
+		this.currentFrames.push(frame);
 	}
 
 	private sendFragmentedMessage(message: string, frameSize: number) {
