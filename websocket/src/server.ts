@@ -27,7 +27,7 @@ class Server {
 					this.upgraded = true;
 
 					setTimeout(() => {
-						this.send(socket, 'I CAN SEND MESSAGES');
+						this.send(socket, 'I CAN SEND MESSAGES LONG MESSAGES I CAN SEND MESSAGES LONG MESSAGES I CAN SEND MESSAGES LONG MESSAGES I CAN SEND MESSAGES LONG MESSAGES ');
 					}, 1000);
 				} else {
 					// console.log('received from client', JSON.stringify(data));

@@ -19,23 +19,18 @@ class Frame {
 		// RSV3
 		let firstEight: number = 0b10000000;
 		firstEight |= opcode;
+		this.byteBuffer.writeUint8(firstEight);
 
-		let payloadLength: Buffer;
 		if (payload.length > 0 && payload.length <= 125) {
-			payloadLength = Buffer.alloc(1);
-			payloadLength.writeUInt8(payload.length);
+			this.byteBuffer.writeUint8(payload.length);
 		} else if (payload.length > 125 && payload.length <= 65535) {
-			payloadLength = Buffer.alloc(3);
-			payloadLength.writeUInt8(126);
-			payloadLength.writeUInt16LE(payload.length);
+			this.byteBuffer.writeUint8(126);
+			this.byteBuffer.writeUint16(payload.length);
 		} else {
-			payloadLength = Buffer.alloc(5);
-			payloadLength.writeUInt8(127);
-			payloadLength.writeUInt32LE(payload.length);
+			this.byteBuffer.writeUint8(127);
+			this.byteBuffer.writeUint32(payload.length);
 		}
 
-		this.byteBuffer.writeUint8(firstEight);
-		this.byteBuffer.append(payloadLength);
 		this.byteBuffer.writeString(payload);
 	}
 
@@ -49,11 +44,6 @@ class Frame {
 		let POSITION: number = 0;
 
 		const buffer: Buffer = this.byteBuffer.buffer;
-		// const temp: Buffer = Buffer.alloc(8);
-		// buffer.copy(temp, 0, 0, 8);
-		// const tempNum: bigint = temp.readBigUInt64LE();
-		// console.log(tempNum.toString(2));
-
 		const first: Buffer = Buffer.alloc(1);
 		buffer.copy(first, 0, 0, 1);
 		const fin: number = this.bitSet(first, 0b10000000) ? 1 : 0;
@@ -72,7 +62,18 @@ class Frame {
 
 		let payloadLength: number = second.readUInt8();
 		payloadLength &= ~0b10000000;
+
 		POSITION++;
+
+		if (payloadLength > 125 && payloadLength <= 65535) {
+			const nextTwo: Buffer = Buffer.alloc(2);
+			buffer.copy(nextTwo, 0, POSITION, (POSITION += 2));
+			payloadLength = nextTwo.readUInt16BE();
+		} else if (payloadLength > 65535) {
+			const nextFour: Buffer = Buffer.alloc(4);
+			buffer.copy(nextFour, 0, POSITION, (POSITION += 4));
+			payloadLength = nextFour.readUInt32BE();
+		}
 
 		let maskingKey: number;
 		let maskBuffer: Buffer;
