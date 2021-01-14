@@ -1,21 +1,25 @@
 import * as net from 'net';
 import Frame from '../frame/frame';
 import { FrameData, Opcode } from '../frame/types';
-import { createServerOpeningHandshake, parseHTTPHeaders } from '../utils';
-import { ClientListeners } from './types';
+import { createClientOpeningHandshake, createServerOpeningHandshake, parseHTTPHeaders } from '../utils';
+import { ClientListeners, ClientType } from './types';
 
 class WSClient {
+	type: ClientType;
+
 	upgraded: boolean;
 
 	private socket: net.Socket;
 	private onMessage: (message: string) => void;
 	private onClose: (message: string) => void;
+	private onConnection: () => void;
 
 	private currentFrames: FrameData[];
 
 	constructor() {
 		this.upgraded = false;
 		this.currentFrames = [];
+		this.type = ClientType.SERVER_CLIENT;
 	}
 
 	attach(socket: net.Socket) {
@@ -23,12 +27,29 @@ class WSClient {
 
 		this.socket.on('data', (data) => {
 			if (!this.upgraded) {
-				this.sendUpgradeToClient(data);
+				if (this.type === ClientType.SERVER_CLIENT) {
+					this.sendUpgradeToClient(data);
+				} else {
+					this.upgraded = true;
+					this.onConnection();
+				}
 				return;
 			}
 
 			const frame: Frame = new Frame(data);
 			this.handleFrame(frame);
+		});
+	}
+
+	connect(host: string, port: number) {
+		this.type = ClientType.REAL_CLIENT;
+		const socket: net.Socket = new net.Socket();
+		socket.connect({ host, port });
+
+		socket.on('connect', () => {
+			const handshake: string = createClientOpeningHandshake(host, port);
+			socket.write(handshake);
+			this.attach(socket);
 		});
 	}
 
@@ -52,7 +73,7 @@ class WSClient {
 		this.socket.write(frame.toBuffer());
 	}
 
-	on(listener: ClientListeners, callback: (message: string) => void) {
+	on(listener: ClientListeners, callback: (message?: string) => void) {
 		switch (listener) {
 			case 'message':
 				this.onMessage = callback;
@@ -60,6 +81,10 @@ class WSClient {
 
 			case 'close':
 				this.onClose = callback;
+				break;
+
+			case 'connection':
+				this.onConnection = callback;
 				break;
 		}
 	}
@@ -72,7 +97,7 @@ class WSClient {
 
 	private pong() {
 		const frame: Frame = new Frame();
-		frame.create(Opcode.PONG, '', true);
+		frame.create(Opcode.PONG, 'pong', true);
 		this.socket.write(frame.toBuffer());
 	}
 

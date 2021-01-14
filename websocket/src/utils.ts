@@ -1,4 +1,5 @@
 import * as crypto from 'crypto';
+import * as btoa from 'btoa';
 
 export function parseHTTPHeaders(data: Buffer): Map<string, string> {
 	const values: Map<string, string> = new Map();
@@ -21,6 +22,27 @@ export function parseHTTPHeaders(data: Buffer): Map<string, string> {
 	}
 
 	return values;
+}
+
+export function createClientOpeningHandshake(host: string, port: number): string {
+	let handshake: string = '';
+
+	handshake += 'GET / HTTP/1.1\r\n';
+	handshake += `Host: ${host}:${port}\r\n`;
+	handshake += 'Upgrade: websocket\r\n';
+	handshake += 'Connection: Upgrade\r\n';
+
+	let alphabet: string = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+	let key: string = '';
+
+	while (key.length < 16) {
+		key += alphabet[Math.floor(Math.random() * alphabet.length)];
+	}
+
+	handshake += `Sec-WebSocket-Key: ${btoa(key)}\r\n`; // TODO: ADD THIS HEADER FIELD
+	handshake += 'Sec-WebSocket-Version: 13\r\n\n';
+
+	return handshake;
 }
 
 export function createServerOpeningHandshake(clientHeaders: Map<string, string>): string {
