@@ -95,6 +95,13 @@ class WSClient {
 		this.socket.write(frame.toBuffer());
 	}
 
+	closeConnection(reason: string) {
+		const frame: Frame = new Frame();
+		frame.create(Opcode.CONNECTION_CLOSE, reason, true);
+		this.socket.write(frame.toBuffer());
+		this.socket.destroy();
+	}
+
 	private pong() {
 		const frame: Frame = new Frame();
 		frame.create(Opcode.PONG, 'pong', true);
@@ -103,6 +110,12 @@ class WSClient {
 
 	private handleFrame(frame: Frame) {
 		const frameData: FrameData = frame.read();
+
+		if (this.type === ClientType.SERVER_CLIENT && frameData.mask === 0) {
+			this.closeConnection('Incorrect mask');
+			return;
+		}
+
 		switch (frameData.opcode) {
 			case Opcode.TEXT_FRAME:
 				this.handleMessage(frameData);
