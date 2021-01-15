@@ -69,7 +69,7 @@ class WSClient {
 		}
 
 		const frame: Frame = new Frame();
-		frame.create(Opcode.TEXT_FRAME, message, true);
+		frame.create(Opcode.TEXT_FRAME, message, true, this.type);
 		this.socket.write(frame.toBuffer());
 	}
 
@@ -91,20 +91,20 @@ class WSClient {
 
 	ping() {
 		const frame: Frame = new Frame();
-		frame.create(Opcode.PING, 'ping', true);
+		frame.create(Opcode.PING, 'ping', true, this.type);
 		this.socket.write(frame.toBuffer());
 	}
 
 	closeConnection(reason: string) {
 		const frame: Frame = new Frame();
-		frame.create(Opcode.CONNECTION_CLOSE, reason, true);
+		frame.create(Opcode.CONNECTION_CLOSE, reason, true, this.type);
 		this.socket.write(frame.toBuffer());
 		this.socket.destroy();
 	}
 
 	private pong() {
 		const frame: Frame = new Frame();
-		frame.create(Opcode.PONG, 'pong', true);
+		frame.create(Opcode.PONG, 'pong', true, this.type);
 		this.socket.write(frame.toBuffer());
 	}
 
@@ -185,16 +185,16 @@ class WSClient {
 
 		const frames: Frame[] = [];
 		const firstFrame: Frame = new Frame();
-		firstFrame.create(Opcode.TEXT_FRAME, payloadSplit[0], false);
+		firstFrame.create(Opcode.TEXT_FRAME, payloadSplit[0], false, this.type);
 		frames.push(firstFrame);
 
 		for (let i = 1; i < payloadSplit.length; i++) {
 			const payload: string = payloadSplit[i];
 			const frame: Frame = new Frame();
 			if (i != payloadSplit.length - 1) {
-				frame.create(Opcode.CONTINUATION_FRAME, payload, false);
+				frame.create(Opcode.CONTINUATION_FRAME, payload, false, this.type);
 			} else {
-				frame.create(Opcode.CONTINUATION_FRAME, payload, true);
+				frame.create(Opcode.CONTINUATION_FRAME, payload, true, this.type);
 			}
 
 			frames.push(frame);

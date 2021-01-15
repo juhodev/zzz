@@ -1,5 +1,8 @@
 import * as ByteBuffer from 'bytebuffer';
+import { ClientType } from '../client/types';
 import { FrameData, Opcode } from './types';
+import * as crypto from 'crypto';
+import { write } from 'fs';
 
 class Frame {
 	private byteBuffer: ByteBuffer;
@@ -12,7 +15,7 @@ class Frame {
 		}
 	}
 
-	create(opcode: Opcode, payload: string, finBit: boolean) {
+	create(opcode: Opcode, payload: string, finBit: boolean, type: ClientType) {
 		// FIN
 		// RSV1
 		// RSV2
@@ -27,16 +30,43 @@ class Frame {
 		this.byteBuffer.writeUint8(firstEight);
 
 		if (payload.length > 0 && payload.length <= 125) {
-			this.byteBuffer.writeUint8(payload.length);
+			let withMask: number = payload.length;
+			if (type === ClientType.REAL_CLIENT) {
+				withMask |= 0b10000000;
+			}
+			this.byteBuffer.writeInt8(withMask);
 		} else if (payload.length > 125 && payload.length <= 65535) {
-			this.byteBuffer.writeUint8(126);
+			let withMask: number = 126;
+			if (type === ClientType.REAL_CLIENT) {
+				withMask |= 0b10000000;
+			}
+
+			this.byteBuffer.writeInt8(withMask);
 			this.byteBuffer.writeUint16(payload.length);
 		} else {
-			this.byteBuffer.writeUint8(127);
+			let withMask: number = 127;
+			if (type === ClientType.REAL_CLIENT) {
+				withMask |= 0b10000000;
+			}
+
+			this.byteBuffer.writeInt8(withMask);
 			this.byteBuffer.writeUint32(payload.length);
 		}
 
-		this.byteBuffer.writeString(payload);
+		if (type === ClientType.REAL_CLIENT) {
+			const mask: Buffer = crypto.randomBytes(4);
+			this.byteBuffer.append(mask);
+			const payloadBuffer: Buffer = Buffer.alloc(payload.length);
+			payloadBuffer.write(payload, 'utf-8');
+			for (let i = 0; i < payloadBuffer.length; i++) {
+				const decoded: number = payloadBuffer.readInt8(i);
+				const maskBit: number = mask.readInt8(i % 4);
+				const encoded: number = decoded ^ maskBit;
+				this.byteBuffer.writeInt8(encoded);
+			}
+		} else {
+			this.byteBuffer.writeString(payload);
+		}
 	}
 
 	toBuffer() {
