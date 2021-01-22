@@ -5,9 +5,6 @@ class Node:
         self.next = None
         self.prev = None
 
-    def __gt__(self, other):
-        return self.key == other.key and self.value == other.value
-
 
 class LinkedList:
     def __init__(self):
