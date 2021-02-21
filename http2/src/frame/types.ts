@@ -7,9 +7,11 @@ export type Frame = {
 
 export enum FrameType {
 	DATA = 0x0,
+	HEADERS = 0x1,
+	SETTINGS = 0x4,
 }
 
-export enum DataFrameFlags {
-	END_STREAM = 0x1,
-	PADDED = 0x8,
-}
+export type Flag = {
+	flag: number;
+	data: any;
+};
