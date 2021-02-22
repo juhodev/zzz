@@ -10,33 +10,20 @@ class DataFrame {
 
 	private data: Buffer;
 
-	constructor(frame: Frame) {
-		this.frame = frame;
+	constructor() {
 		this.readPosition = 0;
 	}
 
-	createDataFrame(data: Buffer, streamIdentifier: number, flags: Flags) {
-		// let flagsBits: number = 0;
-		// if (flags.has(DataFrameFlags.PADDED)) {
-		// 	flagsBits |= DataFrameFlags.PADDED;
-		// }
-		// let paddingAmount: number = 0;
-		// if (flags.has(DataFrameFlags.PADDED)) {
-		// 	paddingAmount = flags.get(DataFrameFlags.PADDED);
-		// }
-		// const length: number = data.length + paddingAmount;
-		// super.create(length, FrameType.DATA, flagsBits, streamIdentifier);
-		// if (flags.has(DataFrameFlags.PADDED)) {
-		// 	this.byteBuffer.writeInt8(paddingAmount);
-		// }
-		// this.byteBuffer.append(data);
-		// if (flags.has(DataFrameFlags.PADDED)) {
-		// 	const paddingBuffer: Buffer = Buffer.alloc(paddingAmount).fill(0x0);
-		// 	this.byteBuffer.append(paddingBuffer);
-		// }
+	create(data: Buffer, streamIdentifier: number, flags: Flags): Frame {
+		const frame: Frame = new Frame();
+		frame.create(FrameType.DATA, flags.toNumber(), streamIdentifier, data);
+		return frame;
 	}
 
-	read() {
+	read(frame: Frame) {
+		this.frame = frame;
+		this.readPosition = 0;
+
 		if (this.frame.getStreamIdentifier() === 0) {
 			// TODO: Response with a PROTOCOL_ERROR
 			return;
@@ -44,7 +31,7 @@ class DataFrame {
 
 		// TODO: Check for stream state, must response with an error if not open or half-closed (local)
 
-		const hasPadding: boolean = hasBitSet(this.frame.getFlags(), DataFrameFlags.PADDED);
+		const hasPadding: boolean = this.frame.hasFlag(DataFrameFlags.PADDED);
 		let paddingLength: number = 0;
 
 		if (hasPadding) {

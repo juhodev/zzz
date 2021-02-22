@@ -1,34 +1,24 @@
-import * as ByteBuffer from 'bytebuffer';
-import { dec2bin, isNil } from '../utilts';
+import { dec2bin, hasBitSet, isNil } from '../utilts';
 
 class Frame {
-	private byteBuffer: ByteBuffer;
-
 	private length: number;
 	private type: number;
 	private flags: number;
 	private streamIdentifier: number;
 	private payload: Buffer;
 
-	private readPosition: number = 0;
+	private readPosition: number;
 
-	constructor(byteBuffer?: ByteBuffer) {
-		if (isNil(byteBuffer)) {
-			this.byteBuffer = new ByteBuffer();
-		} else {
-			this.byteBuffer = byteBuffer;
-		}
+	private buffer: Buffer;
 
-		this.readPosition = 0;
-	}
+	constructor() {}
 
 	toBuffer(): Buffer {
-		const buffer: Buffer = Buffer.alloc(this.byteBuffer.offset);
-		this.byteBuffer.buffer.copy(buffer, 0, 0, this.byteBuffer.offset);
-		return buffer;
+		return this.buffer;
 	}
 
-	protected create(length: number, type: number, flags: number, streamIdentifier: number) {
+	create(type: number, flags: number, streamIdentifier: number, payload: Buffer) {
+		const length: number = payload.length;
 		// "Values greater than 2^14 (16,384) MUST NOT be sent unless the receiver
 		// has set a larger value for SETTINGS_MAX_FRAME_SIZE"
 		// I won't support it so just don't send the frame.
@@ -37,31 +27,35 @@ class Frame {
 			return;
 		}
 
-		const lengthWithType: number = (length << 8) | type;
+		this.buffer = Buffer.alloc(9);
 
-		this.byteBuffer.writeUint32(lengthWithType);
-		this.byteBuffer.writeInt8(flags);
-		this.byteBuffer.writeUint32(streamIdentifier);
+		let position: number = 0;
+
+		const lengthWithType: number = (length << 8) | type;
+		this.buffer.writeUInt32BE(lengthWithType, position);
+		position += 4;
+		this.buffer.writeUInt8(flags, position++);
+		this.buffer.writeUInt32BE(streamIdentifier, position);
+		position += 4;
+		this.buffer = Buffer.concat([this.buffer, payload]);
 	}
 
-	read() {
-		const buffer: Buffer = this.byteBuffer.buffer;
+	read(buffer: Buffer) {
+		this.buffer = buffer;
+		this.readPosition = 0;
 
-		const lengthAndTypeBuffer: Buffer = Buffer.alloc(4);
-		buffer.copy(lengthAndTypeBuffer, 0, 0, 4);
+		const lengthAndType: number = this.buffer.readUInt32BE(this.readPosition);
 		this.readPosition += 4;
 
-		const lengthAndType: number = lengthAndTypeBuffer.readInt32BE();
 		this.length = lengthAndType >> 8;
 		this.type = lengthAndType & 0xff;
 
-		this.flags = this.byteBuffer.readByte(this.readPosition++);
+		this.flags = this.buffer.readUInt8(this.readPosition++);
 
-		this.streamIdentifier = this.byteBuffer.readInt32(this.readPosition);
+		this.streamIdentifier = this.buffer.readUInt32BE(this.readPosition);
 		this.readPosition += 4;
 
-		this.payload = Buffer.alloc(this.length);
-		buffer.copy(this.payload, 0, this.readPosition, this.length);
+		this.payload = this.buffer.slice(this.readPosition);
 	}
 
 	getStreamIdentifier(): number {
@@ -80,8 +74,8 @@ class Frame {
 		return this.payload;
 	}
 
-	getFlags(): number {
-		return this.flags;
+	hasFlag(flag: number): boolean {
+		return hasBitSet(this.flags, flag);
 	}
 }
 

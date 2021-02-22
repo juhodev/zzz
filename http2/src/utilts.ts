@@ -3,7 +3,7 @@ export function isNil(x: any) {
 }
 
 export function hasBitSet(x: number, flag: number) {
-	return (x & flag) === flag;
+	return (x & (1 << flag)) != 0;
 }
 
 export function dec2bin(dec: number) {

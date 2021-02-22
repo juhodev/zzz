@@ -1,4 +1,5 @@
 import Frame from '../frame';
+import { FrameType } from '../types';
 import { Setting } from './types';
 
 class SettingsFrame {
@@ -7,12 +8,12 @@ class SettingsFrame {
 
 	private settings: Map<number, Setting>;
 
-	constructor(frame: Frame) {
+	constructor() {}
+
+	read(frame: Frame) {
 		this.frame = frame;
 		this.readPosition = 0;
-	}
 
-	read() {
 		if (this.frame.getStreamIdentifier() !== 0) {
 			// PROTOCOL_ERROR
 			return;
@@ -36,6 +37,22 @@ class SettingsFrame {
 
 	getSettings(): Map<number, Setting> | undefined {
 		return this.settings;
+	}
+
+	create(flags: number, settings: Setting[]): Frame {
+		const settingsPayload: Buffer = Buffer.alloc(settings.length * (2 + 4));
+
+		let position: number = 0;
+		for (const setting of settings) {
+			settingsPayload.writeUInt16BE(setting.key, position);
+			position += 2;
+			settingsPayload.writeUInt32BE(setting.value, position);
+			position += 4;
+		}
+
+		const frame: Frame = new Frame();
+		frame.create(FrameType.SETTINGS, flags, 0, settingsPayload);
+		return frame;
 	}
 }
 

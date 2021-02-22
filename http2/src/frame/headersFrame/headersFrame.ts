@@ -11,6 +11,8 @@ class HeadersFrame {
 	private readPosition: number;
 
 	private headers: Map<string, string>;
+	private weight: number;
+	private streamDependency: number;
 
 	constructor(frame: Frame) {
 		this.frame = frame;
@@ -58,13 +60,11 @@ class HeadersFrame {
 			return;
 		}
 
-		const buffer: Buffer = this.frame.getPayload();
-
 		this.readPosition = 0;
 
 		// TODO: Change connection state
 
-		const hasPadding: boolean = hasBitSet(this.frame.getFlags(), HeadersFrameFlags.PADDED);
+		const hasPadding: boolean = this.frame.hasFlag(HeadersFrameFlags.PADDED);
 		let paddingLength: number = 0;
 
 		if (hasPadding) {
@@ -78,12 +78,14 @@ class HeadersFrame {
 			paddingLength += 1;
 		}
 
-		const headerBlockLength: number = this.frame.getPayloadLength() - paddingLength / 8;
-		const headerBlock: Buffer = Buffer.alloc(headerBlockLength);
-		buffer.copy(headerBlock, 0, this.readPosition, this.readPosition + headerBlockLength);
+		if (this.frame.hasFlag(HeadersFrameFlags.PRIORITY)) {
+			this.streamDependency = this.frame.getPayload().readUInt32BE(this.readPosition);
+			this.readPosition += 4;
+			this.weight = this.frame.getPayload().readUInt8(this.readPosition++);
+		}
 
+		const headerBlock: Buffer = this.frame.getPayload().slice(this.readPosition);
 		const decompressedHeaders: string[][] = decompress(headerBlock);
-		console.log('headerBlock', headerBlock);
 		this.createHeadersMap(decompressedHeaders);
 	}
 
@@ -91,10 +93,17 @@ class HeadersFrame {
 		return this.headers;
 	}
 
+	getWeight(): number {
+		return this.weight;
+	}
+
+	getStreamDependency(): number {
+		return this.streamDependency;
+	}
+
 	private createHeadersMap(headers: string[][]) {
 		this.headers = new Map();
 
-		console.log('headers', headers);
 		for (const kv of headers) {
 			const key: string = kv[0];
 			const value: string = kv[1];

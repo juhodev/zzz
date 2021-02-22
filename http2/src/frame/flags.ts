@@ -19,6 +19,14 @@ class Flags {
 	get(flag: number): any {
 		return this.flags.get(flag).data;
 	}
+
+	toNumber(): number {
+		let flagsBits: number = 0;
+		for (const flag of this.flags) {
+			flagsBits |= flag[1].flag;
+		}
+		return flagsBits;
+	}
 }
 
 export default Flags;

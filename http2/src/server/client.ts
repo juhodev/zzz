@@ -9,13 +9,21 @@ import HeadersFrame from '../frame/headersFrame/headersFrame';
 import Frame from '../frame/frame';
 import { FrameType } from '../frame/types';
 import DataFrame from '../frame/dataFrame/dataFrame';
+import { Setting, SettingParam, SettingsFrameFlags } from '../frame/settingsFrame/types';
+import GoawayFrame from '../frame/goawayFrame/goawayFrame';
+import Flags from '../frame/flags';
+import PriorityFrame from '../frame/priorityFrame/priorityFrame';
+import RstStreamFrame from '../frame/rstStreamFrame/rstStreamFrame';
 
 class Client {
 	upgraded: boolean;
 	private socket: tls.TLSSocket;
 
+	private settings: Map<number, Setting>;
+
 	constructor() {
 		this.upgraded = false;
+		this.settings = new Map();
 	}
 
 	attach(socket: tls.TLSSocket) {
@@ -23,11 +31,6 @@ class Client {
 
 		this.socket.on('data', (data: Buffer) => {
 			if (this.upgraded) {
-				// console.log(data);
-				// const test: HeadersFrame = new HeadersFrame(ByteBuffer.wrap(data));
-				// test.read();
-
-				// console.log(test.getHeaders());
 				this.handleFrame(data);
 				return;
 			}
@@ -35,8 +38,15 @@ class Client {
 			const dataStr: string = data.toString('utf-8');
 			const requestData: RequestData = this.parseRequest(dataStr);
 
-			console.log(requestData);
 			if (requestData.method === 'HTTP/2.0') {
+				const ackFrame: Frame = new SettingsFrame().create(0, [
+					{ key: SettingParam.SETTINGS_HEADER_TABLE_SIZE, value: 65536 },
+					{ key: SettingParam.SETTINGS_MAX_CONCURRENT_STREAMS, value: 1000 },
+					{ key: SettingParam.SETTINGS_INITIAL_WINDOW_SIZE, value: 0 },
+				]);
+
+				this.write(ackFrame);
+
 				this.upgraded = true;
 				const settingsFrame: Buffer = Buffer.alloc(data.length - 24);
 				data.copy(settingsFrame, 0, 24, data.length);
@@ -58,41 +68,105 @@ class Client {
 
 			const response: string = this.createResponse(resource, '200 OK', [{ key: 'Upgrade', value: 'HTTP/2.0' }]);
 			this.socket.write(response);
-			// this.socket.write(this.sendHTTP1Webpage());
 		});
 	}
 
-	private handleFrame(data: Buffer) {
-		const frame: Frame = new Frame(ByteBuffer.wrap(data));
-		frame.read();
+	private write(frame: Frame) {
+		const buffer: Buffer = frame.toBuffer();
+		// console.log(`=> ${buffer.length}`);
+		this.socket.write(buffer);
+	}
 
-		console.log('received frame', frame.getType());
+	private handleFrame(data: Buffer) {
+		// console.log(`<= ${data.length}`);
+		const frame: Frame = new Frame();
+		frame.read(data);
+
+		// console.log('received frame type', frame.getType());
 
 		switch (frame.getType()) {
 			case FrameType.DATA:
-				const dataFrame: DataFrame = new DataFrame(frame);
-				dataFrame.read();
+				const dataFrame: DataFrame = new DataFrame();
+				dataFrame.read(frame);
 				console.log(dataFrame.getData().toString());
 				break;
 
+			case FrameType.PRIORITY:
+				this.handlePriorityFrame(frame);
+				break;
+
+			case FrameType.RST_STREAM:
+				this.handleRstStreamFrame(frame);
+				break;
+
 			case FrameType.HEADERS:
-				const headersFrame: HeadersFrame = new HeadersFrame(frame);
-				headersFrame.read();
-				console.log('headers', headersFrame.getHeaders());
+				this.handleHeadersFrame(frame);
 				break;
 
 			case FrameType.SETTINGS:
 				this.handleSettingsFrame(frame);
 				break;
+
+			case FrameType.GOAWAY:
+				this.handleGoawayFrame(frame);
+				break;
+
+			default:
+				console.log(` <= RECEIVED A FRAME THAT COULDN'T BE PARSED (type ${frame.getType()})`);
+				break;
 		}
 	}
 
-	private handleSettingsFrame(frame: Frame) {
-		const settingsFrame: SettingsFrame = new SettingsFrame(frame);
-		settingsFrame.read();
-		console.log(settingsFrame.getSettings());
+	private handleRstStreamFrame(frame: Frame) {
+		const rstStreamFrame: RstStreamFrame = new RstStreamFrame();
+		rstStreamFrame.read(frame);
 
-		// TODO: Send a settings frame back
+		console.log(` <= RST_STREAM: error code: ${rstStreamFrame.getErrorCode()}`);
+	}
+
+	private handlePriorityFrame(frame: Frame) {
+		const priorityFrame: PriorityFrame = new PriorityFrame();
+		priorityFrame.read(frame);
+
+		console.log(
+			` <= PRIORITY: Received a priority frame: stream dependency ${priorityFrame.getStreamDependency()}, weight: ${priorityFrame.getWeight()}`,
+		);
+	}
+
+	private handleGoawayFrame(frame: Frame) {
+		const goawayFrame: GoawayFrame = new GoawayFrame(frame);
+		goawayFrame.read();
+
+		console.log(
+			` <= GOAWAY: Last stream id: ${goawayFrame.getLastStreamId()}, error code: ${goawayFrame.getErrorCode()}, debug information: ${goawayFrame.getAdditionalDebugData()}`,
+		);
+	}
+
+	private handleHeadersFrame(frame: Frame) {
+		const headersFrame: HeadersFrame = new HeadersFrame(frame);
+		headersFrame.read();
+		console.log(` <= HEADERS: Received ${headersFrame.getHeaders().size} headers`);
+	}
+
+	private handleSettingsFrame(frame: Frame) {
+		const settingsFrame: SettingsFrame = new SettingsFrame();
+		settingsFrame.read(frame);
+
+		if (frame.hasFlag(SettingsFrameFlags.ACK)) {
+			console.log(` <= SETTINGS: Received ACK`);
+			return;
+		}
+
+		this.settings = settingsFrame.getSettings();
+		console.log(` <= SETTINGS: Received ${this.settings.size} settings`);
+
+		let flags: number = 0;
+		flags |= 1 << SettingsFrameFlags.ACK;
+
+		const ackFrame: Frame = new SettingsFrame().create(flags, []);
+
+		this.write(ackFrame);
+		console.log(' => SETTINGS: Sending ACK');
 	}
 
 	private createResponse(resource: Resource, responseCode: string, extraHeaders: Header[]): string {
