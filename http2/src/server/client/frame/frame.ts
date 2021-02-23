@@ -18,6 +18,12 @@ class Frame {
 	}
 
 	create(type: number, flags: number, streamIdentifier: number, payload: Buffer) {
+		this.type = type;
+		this.flags = flags;
+		this.streamIdentifier = streamIdentifier;
+		this.payload = payload;
+		this.length = payload.length;
+
 		const length: number = payload.length;
 		// "Values greater than 2^14 (16,384) MUST NOT be sent unless the receiver
 		// has set a larger value for SETTINGS_MAX_FRAME_SIZE"

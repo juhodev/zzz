@@ -3,8 +3,8 @@ import { hasBitSet } from '../../../../utilts';
 import Flags from '../flags';
 import Frame from '../frame';
 import { FrameType } from '../types';
-import { compress, decompress } from './headerCompression';
 import { HeadersFrameFlags } from './types';
+import * as HPACK from 'hpack';
 
 class HeadersFrame {
 	private frame: Frame;
@@ -14,47 +14,44 @@ class HeadersFrame {
 	private weight: number;
 	private streamDependency: number;
 
-	constructor(frame: Frame) {
-		this.frame = frame;
+	constructor() {
 		this.readPosition = 0;
 	}
 
-	createHeadersFrame(streamIndentifier: number, priority: number, headers: string[][], flags: Flags) {
-		// let flagsBits: number = 0;
-		// if (flags.has(HeadersFrameFlags.END_STREAM)) {
-		// 	flagsBits |= HeadersFrameFlags.END_STREAM;
-		// }
-		// if (flags.has(HeadersFrameFlags.END_HEADERS)) {
-		// 	flagsBits |= HeadersFrameFlags.END_HEADERS;
-		// }
-		// if (flags.has(HeadersFrameFlags.PADDED)) {
-		// 	flagsBits |= HeadersFrameFlags.PADDED;
-		// }
-		// if (flags.has(HeadersFrameFlags.PRIORITY)) {
-		// 	flagsBits |= HeadersFrameFlags.PRIORITY;
-		// }
-		// const headerBlock: Buffer = compress(headers);
-		// let paddingAmount: number = 0;
-		// if (flags.has(HeadersFrameFlags.PADDED)) {
-		// 	paddingAmount = flags.get(HeadersFrameFlags.PADDED);
-		// }
-		// super.create(headerBlock.length + paddingAmount, FrameType.HEADERS, flagsBits, streamIndentifier);
-		// if (flags.has(HeadersFrameFlags.PADDED)) {
-		// 	this.byteBuffer.writeInt8(flags.get(HeadersFrameFlags.PADDED));
-		// }
-		// if (flags.has(HeadersFrameFlags.PRIORITY)) {
-		// 	this.byteBuffer.writeUint32(flags.get(HeadersFrameFlags.PRIORITY));
-		// 	this.byteBuffer.writeUint8(priority);
-		// }
-		// this.byteBuffer.append(headerBlock);
-		// // TODO: Figure when to use a continuation block
-		// if (flags.has(HeadersFrameFlags.PADDED)) {
-		// 	const paddingBuffer: Buffer = Buffer.alloc(flags.get(HeadersFrameFlags.PADDED)).fill(0x0);
-		// 	this.byteBuffer.append(paddingBuffer);
-		// }
+	create(hpack: HPACK, headers: string[][], flags: Flags, streamIdentifier: number, weight?: number): Frame {
+		let paddingReserved: number = 0;
+		if (flags.has(HeadersFrameFlags.PADDED)) {
+			paddingReserved += 4;
+		}
+
+		let position: number = 0;
+
+		const headerBuffer: Buffer = hpack.encode(headers);
+		let payload: Buffer = Buffer.alloc(paddingReserved);
+
+		if (flags.has(HeadersFrameFlags.PADDED)) {
+			payload.writeUInt8(flags.get(HeadersFrameFlags.PADDED), position++);
+		}
+
+		if (flags.has(HeadersFrameFlags.PRIORITY)) {
+			payload.writeUInt32BE(flags.get(HeadersFrameFlags.PRIORITY));
+			payload.writeUInt8(weight);
+		}
+
+		payload = Buffer.concat([payload, headerBuffer]);
+
+		if (flags.has(HeadersFrameFlags.PADDED)) {
+			payload = Buffer.concat([payload, Buffer.alloc(flags.get(HeadersFrameFlags.PADDED)).fill(0x0)]);
+		}
+
+		const frame: Frame = new Frame();
+		frame.create(FrameType.HEADERS, flags.toNumber(), streamIdentifier, payload);
+		return frame;
 	}
 
-	read() {
+	read(frame: Frame, hpack: HPACK) {
+		this.frame = frame;
+
 		if (this.frame.getStreamIdentifier() === 0) {
 			// TODO: Response with a PROTOCOL_ERROR
 			return;
@@ -85,7 +82,7 @@ class HeadersFrame {
 		}
 
 		const headerBlock: Buffer = this.frame.getPayload().slice(this.readPosition);
-		const decompressedHeaders: string[][] = decompress(headerBlock);
+		const decompressedHeaders: string[][] = hpack.decode(headerBlock);
 		this.createHeadersMap(decompressedHeaders);
 	}
 

@@ -23,7 +23,7 @@ class Flags {
 	toNumber(): number {
 		let flagsBits: number = 0;
 		for (const flag of this.flags) {
-			flagsBits |= flag[1].flag;
+			flagsBits |= 1 << flag[1].flag;
 		}
 		return flagsBits;
 	}

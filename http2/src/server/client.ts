@@ -4,9 +4,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { isNil } from '../utilts';
 import Frame from './client/frame/frame';
-import { Setting } from './client/frame/settingsFrame/types';
+import { Setting, SettingParam } from './client/frame/settingsFrame/types';
 import Stream from './client/stream';
 import { StreamState } from './client/types';
+import * as HPACK from 'hpack';
 
 class Client {
 	upgraded: boolean;
@@ -14,7 +15,11 @@ class Client {
 
 	private socket: tls.TLSSocket;
 
-	private settings: Map<number, Setting>;
+	private serverSettings: Map<number, Setting>;
+	private clientSettings: Map<number, Setting>;
+
+	private hpackContext: HPACK;
+
 	private streams: Stream[];
 
 	constructor() {
@@ -22,8 +27,16 @@ class Client {
 		// the streams created by the server must be even.
 		this.streamIdentifierCounter = 2;
 		this.upgraded = false;
-		this.settings = new Map();
+
+		this.serverSettings = new Map();
+		this.serverSettings.set(SettingParam.SETTINGS_MAX_CONCURRENT_STREAMS, {
+			key: SettingParam.SETTINGS_MAX_CONCURRENT_STREAMS,
+			value: 1000,
+		});
+		this.clientSettings = new Map();
+
 		this.streams = [];
+		this.hpackContext = new HPACK();
 	}
 
 	attach(socket: tls.TLSSocket) {
@@ -68,21 +81,57 @@ class Client {
 	}
 
 	getSettings(): Map<number, Setting> {
-		return this.settings;
+		return this.clientSettings;
 	}
 
 	setSettings(settings: Map<number, Setting>) {
-		this.settings = settings;
+		this.clientSettings = settings;
+	}
+
+	getServerSettings(): Setting[] {
+		const settings: Setting[] = [];
+
+		for (const serverSetting of this.serverSettings) {
+			settings.push(serverSetting[1]);
+		}
+
+		return settings;
 	}
 
 	createStream(): Stream {
-		const stream: Stream = new Stream(this, this.streamIdentifierCounter);
+		let maxStreams: number;
+		if (this.clientSettings.has(SettingParam.SETTINGS_MAX_CONCURRENT_STREAMS)) {
+			maxStreams = this.clientSettings.get(SettingParam.SETTINGS_MAX_CONCURRENT_STREAMS).value;
+		} else {
+			maxStreams = Infinity;
+		}
+
+		// If the active stream count created by the server exceeds the max limit set by the client then
+		// do not create a new stream.
+		// rfc7540#section-5.1.2
+		if (this.countStreamsCreatedByServer() > maxStreams) {
+			return;
+		}
+
+		const stream: Stream = new Stream(this, this.streamIdentifierCounter, true);
 		this.streamIdentifierCounter += 2;
 
 		this.streams.push(stream);
 		this.closeOldStreams(stream.getIdentifier());
 
 		return stream;
+	}
+
+	getHPACK(): HPACK {
+		return this.hpackContext;
+	}
+
+	private countStreamsCreatedByServer(): number {
+		return this.streams.filter((stream) => stream.wasInitiatedByServer()).length;
+	}
+
+	private countStreamsCreatedByClient(): number {
+		return this.streams.filter((stream) => !stream.wasInitiatedByServer()).length;
 	}
 
 	/**
@@ -110,7 +159,19 @@ class Client {
 
 		let stream: Stream = this.streams.find((s) => s.getIdentifier() === frame.getStreamIdentifier());
 		if (stream === undefined) {
-			stream = new Stream(this, frame.getStreamIdentifier());
+			let maxStreams: number;
+			if (this.serverSettings.has(SettingParam.SETTINGS_MAX_CONCURRENT_STREAMS)) {
+				maxStreams = this.serverSettings.get(SettingParam.SETTINGS_MAX_CONCURRENT_STREAMS).value;
+			} else {
+				maxStreams = Infinity;
+			}
+
+			if (this.countStreamsCreatedByClient() > maxStreams) {
+				// TODO: Responde with PROTOCOL_ERROR
+				return;
+			}
+
+			stream = new Stream(this, frame.getStreamIdentifier(), false);
 			this.streams.push(stream);
 
 			this.closeOldStreams(frame.getStreamIdentifier());

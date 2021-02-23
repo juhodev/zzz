@@ -1,15 +1,19 @@
+import { loadResource } from '../../resourceLoader';
+import { isNil, prettifyFrameName } from '../../utilts';
 import Client from '../client';
+import { Resource } from '../types';
 import DataFrame from './frame/dataFrame/dataFrame';
+import { DataFrameFlags } from './frame/dataFrame/types';
 import Flags from './frame/flags';
 import Frame from './frame/frame';
 import GoawayFrame from './frame/goawayFrame/goawayFrame';
-import { compress } from './frame/headersFrame/headerCompression';
 import HeadersFrame from './frame/headersFrame/headersFrame';
+import { HeadersFrameFlags } from './frame/headersFrame/types';
 import PriorityFrame from './frame/priorityFrame/priorityFrame';
 import PushPromiseFrame from './frame/pushPromiseFrame/pushPromiseFrame';
 import RstStreamFrame from './frame/rstStreamFrame/rstStreamFrame';
 import SettingsFrame from './frame/settingsFrame/settingsFrame';
-import { SettingParam, SettingsFrameFlags } from './frame/settingsFrame/types';
+import { SettingsFrameFlags } from './frame/settingsFrame/types';
 import { FrameType } from './frame/types';
 import { StreamState } from './types';
 
@@ -18,17 +22,31 @@ class Stream {
 	private state: StreamState;
 	private identifier: number;
 
-	constructor(client: Client, identifier?: number) {
+	private initiatedByServer: boolean;
+
+	constructor(client: Client, identifier: number, initiatedByServer: boolean) {
 		this.client = client;
 		this.state = StreamState.IDLE;
 		this.identifier = identifier;
+		this.initiatedByServer = initiatedByServer;
 	}
 
 	send(frame: Frame) {
+		console.log(
+			` ===>>> ${prettifyFrameName(
+				frame.getType(),
+			)}: ${frame.getPayloadLength()} bytes on stream ${frame.getStreamIdentifier()}`,
+			frame.toBuffer(),
+		);
 		this.client.write(frame.toBuffer());
 	}
 
 	read(frame: Frame) {
+		console.log(
+			` <<<=== ${prettifyFrameName(
+				frame.getType(),
+			)}: ${frame.getPayloadLength()} bytes on stream ${frame.getStreamIdentifier()}`,
+		);
 		switch (frame.getType()) {
 			case FrameType.DATA:
 				this.handleDataFrame(frame);
@@ -60,6 +78,10 @@ class Stream {
 		}
 	}
 
+	wasInitiatedByServer(): boolean {
+		return this.initiatedByServer;
+	}
+
 	getState() {
 		return this.state;
 	}
@@ -72,20 +94,20 @@ class Stream {
 		const dataFrame: DataFrame = new DataFrame();
 		dataFrame.read(frame);
 
-		console.log(` <= DATA: ${frame.getPayloadLength()} bytes`);
+		// console.log(` <= DATA: ${frame.getPayloadLength()} bytes`);
 	}
 
 	private handleGoawayFrame(frame: Frame) {
 		const goawayFrame: GoawayFrame = new GoawayFrame(frame);
 		goawayFrame.read();
 
-		console.log(
-			` <= GOAWAY: Last stream id: ${goawayFrame.getLastStreamId()}, error code: ${goawayFrame.getErrorCode()}, debug information: ${goawayFrame.getAdditionalDebugData()}`,
-		);
+		// console.log(
+		// 	` <= GOAWAY: Last stream id: ${goawayFrame.getLastStreamId()}, error code: ${goawayFrame.getErrorCode()}, debug information: ${goawayFrame.getAdditionalDebugData()}`,
+		// );
 	}
 
 	private createStream() {
-		const headers: Buffer = compress([
+		const headers: Buffer = this.client.getHPACK().encode([
 			[':authority', 'localhost'],
 			['method', 'GET'],
 			[':path', '/'],
@@ -103,18 +125,52 @@ class Stream {
 	}
 
 	private handleHeadersFrame(frame: Frame) {
-		const headersFrame: HeadersFrame = new HeadersFrame(frame);
-		headersFrame.read();
-		console.log(` <= HEADERS: Received ${headersFrame.getHeaders().size} headers`);
+		const headersFrame: HeadersFrame = new HeadersFrame();
+		headersFrame.read(frame, this.client.getHPACK());
 
-		// const stream: Stream = this.client.createStream();
+		const resourcePath: string = headersFrame.getHeaders().get(':path');
+		const resource: Resource = loadResource(resourcePath);
 
-		this.createStream();
+		if (isNil(resource)) {
+			const serverHeadersFrame: Frame = new HeadersFrame().create(
+				this.client.getHPACK(),
+				[
+					[':status', '404'],
+					[':version', 'HTTP/2.0'],
+				],
+				new Flags().add({ flag: HeadersFrameFlags.END_HEADERS, data: 1 }),
+				frame.getStreamIdentifier(),
+			);
+			this.send(serverHeadersFrame);
+
+			const data: Frame = new DataFrame().create(
+				Buffer.alloc(0),
+				frame.getStreamIdentifier(),
+				new Flags().add({ flag: DataFrameFlags.END_STREAM, data: 1 }),
+			);
+			this.send(data);
+			return;
+		}
+
+		const data: Buffer = Buffer.from(resource.content);
+		const serverHeadersFrame: Frame = new HeadersFrame().create(
+			this.client.getHPACK(),
+			[
+				[':status', '200'],
+				[':version', 'HTTP/2.0'],
+				['vary', 'Accept-Encoding'],
+				['content-type', resource.contentType],
+				['content-length', data.length.toString()],
+			],
+			new Flags().add({ flag: HeadersFrameFlags.END_HEADERS, data: 1 }),
+			frame.getStreamIdentifier(),
+		);
+		this.send(serverHeadersFrame);
 
 		const test: Frame = new DataFrame().create(
-			Buffer.from('<html><head><title>Test</title></head><body>hello world</body></html>'),
-			2,
-			new Flags(),
+			data,
+			frame.getStreamIdentifier(),
+			new Flags().add({ flag: DataFrameFlags.END_STREAM, data: 1 }),
 		);
 		this.send(test);
 	}
@@ -123,16 +179,16 @@ class Stream {
 		const rstStreamFrame: RstStreamFrame = new RstStreamFrame();
 		rstStreamFrame.read(frame);
 
-		console.log(` <= RST_STREAM: error code: ${rstStreamFrame.getErrorCode()}`);
+		// console.log(` <= RST_STREAM: error code: ${rstStreamFrame.getErrorCode()}`);
 	}
 
 	private handlePriorityFrame(frame: Frame) {
 		const priorityFrame: PriorityFrame = new PriorityFrame();
 		priorityFrame.read(frame);
 
-		console.log(
-			` <= PRIORITY: Received a priority frame: stream dependency ${priorityFrame.getStreamDependency()}, weight: ${priorityFrame.getWeight()}`,
-		);
+		// console.log(
+		// 	` <= PRIORITY: Received a priority frame: stream dependency ${priorityFrame.getStreamDependency()}, weight: ${priorityFrame.getWeight()}`,
+		// );
 	}
 
 	private handleSettingsFrame(frame: Frame) {
@@ -140,27 +196,27 @@ class Stream {
 		settingsFrame.read(frame);
 
 		if (frame.hasFlag(SettingsFrameFlags.ACK)) {
-			console.log(` <= SETTINGS: Received ACK`);
+			// console.log(` <= SETTINGS: Received ACK`);
 			return;
 		}
 
 		this.client.setSettings(settingsFrame.getSettings());
-		console.log(` <= SETTINGS: Received ${this.client.getSettings().size} settings`);
+		// console.log(` <= SETTINGS: Received ${this.client.getSettings().size} settings`);
 
 		let flags: number = 0;
 		flags |= 1 << SettingsFrameFlags.ACK;
 
 		const ackFrame: Frame = new SettingsFrame().create(flags, [], this.identifier);
 		this.send(ackFrame);
-		console.log(' => SETTINGS: Sending ACK');
+		// console.log(' => SETTINGS: Sending ACK');
 
 		const serverSettingsFrame: Frame = new SettingsFrame().create(
 			0,
-			[{ key: SettingParam.SETTINGS_MAX_CONCURRENT_STREAMS, value: 1000 }],
+			this.client.getServerSettings(),
 			this.identifier,
 		);
 		this.send(serverSettingsFrame);
-		console.log(' => SETTINGS: Sending server settings');
+		// console.log(' => SETTINGS: Sending server settings');
 	}
 }
 
