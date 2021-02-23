@@ -1,4 +1,4 @@
-import { dec2bin, hasBitSet, isNil } from '../utilts';
+import { dec2bin, hasBitSet, isNil } from '../../../utilts';
 
 class Frame {
 	private length: number;

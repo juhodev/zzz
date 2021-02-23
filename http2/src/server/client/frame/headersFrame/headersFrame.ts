@@ -1,5 +1,5 @@
 import * as ByteBuffer from 'bytebuffer';
-import { hasBitSet } from '../../utilts';
+import { hasBitSet } from '../../../../utilts';
 import Flags from '../flags';
 import Frame from '../frame';
 import { FrameType } from '../types';

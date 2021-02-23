@@ -3,27 +3,27 @@ import { Header, RequestData, Resource, ResourceType } from './types';
 import * as fs from 'fs';
 import * as path from 'path';
 import { isNil } from '../utilts';
-import SettingsFrame from '../frame/settingsFrame/settingsFrame';
-import * as ByteBuffer from 'bytebuffer';
-import HeadersFrame from '../frame/headersFrame/headersFrame';
-import Frame from '../frame/frame';
-import { FrameType } from '../frame/types';
-import DataFrame from '../frame/dataFrame/dataFrame';
-import { Setting, SettingParam, SettingsFrameFlags } from '../frame/settingsFrame/types';
-import GoawayFrame from '../frame/goawayFrame/goawayFrame';
-import Flags from '../frame/flags';
-import PriorityFrame from '../frame/priorityFrame/priorityFrame';
-import RstStreamFrame from '../frame/rstStreamFrame/rstStreamFrame';
+import Frame from './client/frame/frame';
+import { Setting } from './client/frame/settingsFrame/types';
+import Stream from './client/stream';
+import { StreamState } from './client/types';
 
 class Client {
 	upgraded: boolean;
+	streamIdentifierCounter: number;
+
 	private socket: tls.TLSSocket;
 
 	private settings: Map<number, Setting>;
+	private streams: Stream[];
 
 	constructor() {
+		// The stream identifier 0x0 is reserved for connection control frames and
+		// the streams created by the server must be even.
+		this.streamIdentifierCounter = 2;
 		this.upgraded = false;
 		this.settings = new Map();
+		this.streams = [];
 	}
 
 	attach(socket: tls.TLSSocket) {
@@ -39,14 +39,6 @@ class Client {
 			const requestData: RequestData = this.parseRequest(dataStr);
 
 			if (requestData.method === 'HTTP/2.0') {
-				const ackFrame: Frame = new SettingsFrame().create(0, [
-					{ key: SettingParam.SETTINGS_HEADER_TABLE_SIZE, value: 65536 },
-					{ key: SettingParam.SETTINGS_MAX_CONCURRENT_STREAMS, value: 1000 },
-					{ key: SettingParam.SETTINGS_INITIAL_WINDOW_SIZE, value: 0 },
-				]);
-
-				this.write(ackFrame);
-
 				this.upgraded = true;
 				const settingsFrame: Buffer = Buffer.alloc(data.length - 24);
 				data.copy(settingsFrame, 0, 24, data.length);
@@ -71,10 +63,44 @@ class Client {
 		});
 	}
 
-	private write(frame: Frame) {
-		const buffer: Buffer = frame.toBuffer();
-		// console.log(`=> ${buffer.length}`);
+	write(buffer: Buffer) {
 		this.socket.write(buffer);
+	}
+
+	getSettings(): Map<number, Setting> {
+		return this.settings;
+	}
+
+	setSettings(settings: Map<number, Setting>) {
+		this.settings = settings;
+	}
+
+	createStream(): Stream {
+		const stream: Stream = new Stream(this, this.streamIdentifierCounter);
+		this.streamIdentifierCounter += 2;
+
+		this.streams.push(stream);
+		this.closeOldStreams(stream.getIdentifier());
+
+		return stream;
+	}
+
+	/**
+	 * Closes all old streams that are in the 'idle' state according to the spec.
+	 *
+	 *  "The first use of a new stream identifier implicitly closes all
+	 *  streams in the "idle" state that might have been initiated by that
+	 *  peer with a lower-valued stream identifier.  For example, if a client
+	 *  sends a HEADERS frame on stream 7 without ever sending a frame on
+	 *  stream 5, then stream 5 transitions to the "closed" state when the
+	 *  first frame for stream 7 is sent or received."
+	 *
+	 * @param newStreamIdentifier Identifier for a new stream that has not been seen before
+	 */
+	private closeOldStreams(newStreamIdentifier: number) {
+		this.streams = this.streams.filter(
+			(stream) => stream.getIdentifier() < newStreamIdentifier && stream.getState() == StreamState.IDLE,
+		);
 	}
 
 	private handleFrame(data: Buffer) {
@@ -82,91 +108,15 @@ class Client {
 		const frame: Frame = new Frame();
 		frame.read(data);
 
-		// console.log('received frame type', frame.getType());
+		let stream: Stream = this.streams.find((s) => s.getIdentifier() === frame.getStreamIdentifier());
+		if (stream === undefined) {
+			stream = new Stream(this, frame.getStreamIdentifier());
+			this.streams.push(stream);
 
-		switch (frame.getType()) {
-			case FrameType.DATA:
-				const dataFrame: DataFrame = new DataFrame();
-				dataFrame.read(frame);
-				console.log(dataFrame.getData().toString());
-				break;
-
-			case FrameType.PRIORITY:
-				this.handlePriorityFrame(frame);
-				break;
-
-			case FrameType.RST_STREAM:
-				this.handleRstStreamFrame(frame);
-				break;
-
-			case FrameType.HEADERS:
-				this.handleHeadersFrame(frame);
-				break;
-
-			case FrameType.SETTINGS:
-				this.handleSettingsFrame(frame);
-				break;
-
-			case FrameType.GOAWAY:
-				this.handleGoawayFrame(frame);
-				break;
-
-			default:
-				console.log(` <= RECEIVED A FRAME THAT COULDN'T BE PARSED (type ${frame.getType()})`);
-				break;
-		}
-	}
-
-	private handleRstStreamFrame(frame: Frame) {
-		const rstStreamFrame: RstStreamFrame = new RstStreamFrame();
-		rstStreamFrame.read(frame);
-
-		console.log(` <= RST_STREAM: error code: ${rstStreamFrame.getErrorCode()}`);
-	}
-
-	private handlePriorityFrame(frame: Frame) {
-		const priorityFrame: PriorityFrame = new PriorityFrame();
-		priorityFrame.read(frame);
-
-		console.log(
-			` <= PRIORITY: Received a priority frame: stream dependency ${priorityFrame.getStreamDependency()}, weight: ${priorityFrame.getWeight()}`,
-		);
-	}
-
-	private handleGoawayFrame(frame: Frame) {
-		const goawayFrame: GoawayFrame = new GoawayFrame(frame);
-		goawayFrame.read();
-
-		console.log(
-			` <= GOAWAY: Last stream id: ${goawayFrame.getLastStreamId()}, error code: ${goawayFrame.getErrorCode()}, debug information: ${goawayFrame.getAdditionalDebugData()}`,
-		);
-	}
-
-	private handleHeadersFrame(frame: Frame) {
-		const headersFrame: HeadersFrame = new HeadersFrame(frame);
-		headersFrame.read();
-		console.log(` <= HEADERS: Received ${headersFrame.getHeaders().size} headers`);
-	}
-
-	private handleSettingsFrame(frame: Frame) {
-		const settingsFrame: SettingsFrame = new SettingsFrame();
-		settingsFrame.read(frame);
-
-		if (frame.hasFlag(SettingsFrameFlags.ACK)) {
-			console.log(` <= SETTINGS: Received ACK`);
-			return;
+			this.closeOldStreams(frame.getStreamIdentifier());
 		}
 
-		this.settings = settingsFrame.getSettings();
-		console.log(` <= SETTINGS: Received ${this.settings.size} settings`);
-
-		let flags: number = 0;
-		flags |= 1 << SettingsFrameFlags.ACK;
-
-		const ackFrame: Frame = new SettingsFrame().create(flags, []);
-
-		this.write(ackFrame);
-		console.log(' => SETTINGS: Sending ACK');
+		stream.read(frame);
 	}
 
 	private createResponse(resource: Resource, responseCode: string, extraHeaders: Header[]): string {

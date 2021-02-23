@@ -39,7 +39,7 @@ class SettingsFrame {
 		return this.settings;
 	}
 
-	create(flags: number, settings: Setting[]): Frame {
+	create(flags: number, settings: Setting[], streamIdentifier: number): Frame {
 		const settingsPayload: Buffer = Buffer.alloc(settings.length * (2 + 4));
 
 		let position: number = 0;
@@ -51,7 +51,7 @@ class SettingsFrame {
 		}
 
 		const frame: Frame = new Frame();
-		frame.create(FrameType.SETTINGS, flags, 0, settingsPayload);
+		frame.create(FrameType.SETTINGS, flags, streamIdentifier, settingsPayload);
 		return frame;
 	}
 }
