@@ -8,9 +8,11 @@ class Server {
 	listen(port?: number) {
 		this.port = port || 443;
 
+		const { SERVER_KEY, SERVER_CERT } = process.env;
+
 		const options: any = {
-			key: fs.readFileSync('I:/tls/server-key.pem'),
-			cert: fs.readFileSync('I:/tls/server-cert.pem'),
+			key: fs.readFileSync(SERVER_KEY),
+			cert: fs.readFileSync(SERVER_CERT),
 			rejectUnauthorized: true,
 			ALPNProtocols: ['h2'],
 		};
