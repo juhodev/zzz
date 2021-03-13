@@ -173,6 +173,7 @@ class Client {
 
 			stream = new Stream(this, frame.getStreamIdentifier(), false);
 			this.streams.push(stream);
+			console.log(`[STREAM] Creating stream with id ${stream.getIdentifier()}`);
 
 			this.closeOldStreams(frame.getStreamIdentifier());
 		}
